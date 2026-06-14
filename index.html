@@ -20,7 +20,7 @@
   --green-light: #eaf7ec;
   --red: #ff3b30;
   --red-light: #fff0ef;
-  --cell: 38px;
+  --cell: 32px;
   --r: 10px;
 }
 
@@ -146,7 +146,43 @@ html, body { height: 100dvh; background: var(--bg); color: var(--tx); font-famil
 .btn-gen:disabled { background: var(--border); color: var(--tx3); cursor: not-allowed; }
 
 /* ── PUZZLE ── */
-.puzzle-scroll { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.puzzle-scroll {
+  flex: 1; overflow: hidden; min-height: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto 1fr;
+  gap: 0;
+  padding: 0;
+}
+@media (max-width: 700px) {
+  .puzzle-scroll { display: flex; flex-direction: column; overflow-y: auto; padding: 10px; gap: 10px; }
+}
+.pz-topbar {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  background: var(--surface); flex-shrink: 0;
+}
+.pz-left {
+  padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  border-right: 1px solid var(--border); overflow: auto;
+  grid-row: 2 / -1;
+}
+.pz-right {
+  display: flex; flex-direction: column; overflow: hidden; min-height: 0;
+  grid-row: 2 / -1;
+}
+.pz-progress {
+  padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  display: flex; align-items: center; gap: 10px;
+}
+.pz-clues { flex: 1; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; }
+@media (max-width: 700px) {
+  .pz-topbar { order: 0; }
+  .pz-left { border-right: none; border-bottom: 1px solid var(--border); order: 1; padding: 8px; }
+  .pz-right { order: 2; }
+  .pz-clues { grid-template-columns: 1fr 1fr; }
+}
 
 /* ── PUZZLE TOP ── */
 .pz-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
@@ -194,7 +230,8 @@ html, body { height: 100dvh; background: var(--bg); color: var(--tx); font-famil
   border: 1px solid var(--border); cursor: pointer;
 }
 .cell.hi { background: #dce8fb; border-color: #a8c5f5 !important; }
-.cell.sel { background: #b8d4f8; border-color: var(--blue) !important; }
+.cell.cur { background: #1d63d9 !important; border-color: #1d63d9 !important; }
+.cell.cur input { color: #fff !important; }
 .cell.ok { background: var(--green-light) !important; border-color: #a0dba8 !important; }
 .cell.ok input { color: #1a7f2a !important; }
 .cell.ng { background: var(--red-light) !important; border-color: #ffb3af !important; }
@@ -214,17 +251,17 @@ html, body { height: 100dvh; background: var(--bg); color: var(--tx); font-famil
 }
 
 /* ── CLUES ── */
-.clues-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-@media (max-width: 420px) { .clues-grid { grid-template-columns: 1fr; } }
-.clue-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+.clue-panel { background: var(--surface); border-right: 1px solid var(--border); overflow: hidden; display: flex; flex-direction: column; }
+.clue-panel:last-child { border-right: none; }
 .clue-panel-hd {
-  padding: 8px 14px; border-bottom: 1px solid var(--border);
-  font-size: .68rem; font-weight: 600; color: var(--tx3);
+  padding: 7px 12px; border-bottom: 1px solid var(--border);
+  font-size: .66rem; font-weight: 600; color: var(--tx3);
   text-transform: uppercase; letter-spacing: .08em;
   display: flex; justify-content: space-between; align-items: center;
+  flex-shrink: 0; background: var(--bg);
 }
-.clue-panel-hd span { color: var(--tx); font-size: .78rem; font-weight: 700; letter-spacing: 0; text-transform: none; }
-.clue-list { display: flex; flex-direction: column; }
+.clue-panel-hd span { color: var(--tx); font-size: .76rem; font-weight: 700; letter-spacing: 0; text-transform: none; }
+.clue-list { display: flex; flex-direction: column; overflow-y: auto; flex: 1; }
 .ci {
   padding: 8px 12px; border-bottom: 1px solid var(--border);
   display: flex; gap: 8px; cursor: pointer; transition: background .1s;
@@ -369,8 +406,8 @@ var mode = 'easy';
 var puzzle = null, activeNum = 0, activeDir = 'across';
 
 // ── INIT ──────────────────────────────────────────────────
-var selLists = new Set();
-for (var _i = 1; _i <= 50; _i++) selLists.add(_i); // all selected by default
+var selLists = new Set(); // nothing selected by default
+var activeR = -1, activeC = -1;
 
 function init() {
   buildCatFilters();
@@ -384,7 +421,7 @@ function init() {
 function buildListGrid() {
   var g = document.getElementById('listGrid'); g.innerHTML = '';
   for (var i = 1; i <= 50; i++) {
-    var b = document.createElement('button'); b.className = 'lb sel'; b.textContent = i; b.setAttribute('data-n', i);
+    var b = document.createElement('button'); b.className = 'lb'; b.textContent = i; b.setAttribute('data-n', i);
     (function(n, btn) {
       btn.addEventListener('click', function() {
         if (selLists.has(n)) { selLists.delete(n); btn.classList.remove('sel'); }
@@ -705,24 +742,20 @@ function renderPuzzle() {
   var down   = P.placed.filter(function(p){return p.dir==='down';}).sort(function(a,b){return a.number-b.number;});
   var sc = document.getElementById('pzScroll'); sc.innerHTML = '';
 
-  // Back + actions
-  var top = el('div','pz-top');
-  top.innerHTML = '<div class="pz-info">' + P.placed.length + ' Wörter</div>';
+  // ── Top bar (full width) ──
+  var topbar = el('div','pz-topbar');
+  topbar.innerHTML = '<div class="pz-info">'+P.placed.length+' Wörter</div>';
   var acts = el('div','pz-acts');
   acts.innerHTML = '<button class="btn-sm" onclick="showSetup()">← Zurück</button><button class="btn-sm" onclick="checkAll()">Prüfen</button><button class="btn-sm" onclick="revealAll()">Lösung</button><button class="btn-sm" onclick="resetAll()">Reset</button><button class="btn-sm primary" onclick="generate()">↻ Neu</button>';
-  top.appendChild(acts); sc.appendChild(top);
+  topbar.appendChild(acts); sc.appendChild(topbar);
 
-  // Progress
-  var pb = el('div','progress-bar');
-  pb.innerHTML = '<div class="progress-pct" id="pct">–</div><div style="flex:1"><div class="progress-track"><div class="progress-fill" id="pFill"></div></div><div class="progress-label" id="pLbl">0 / '+P.placed.length+' ausgefüllt</div></div>';
-  sc.appendChild(pb);
+  // ── Left: active clue bar + grid ──
+  var pzLeft = el('div','pz-left');
 
-  // Active clue bar
   var acb = el('div','active-clue'); acb.id='acBar';
   acb.innerHTML = '<div class="ac-num" id="acNum"></div><div><div class="ac-clue" id="acClue"></div><div class="ac-meta" id="acMeta"></div></div><div class="ac-dir" id="acDir"></div>';
-  sc.appendChild(acb);
+  pzLeft.appendChild(acb);
 
-  // Grid
   var gw = el('div','grid-wrap');
   var cg = el('div','cw-grid'); cg.id='cwGrid';
   cg.style.gridTemplateColumns = 'repeat('+P.cols+',var(--cell))';
@@ -740,13 +773,22 @@ function renderPuzzle() {
     }
     cg.appendChild(cell);
   }
-  gw.appendChild(cg); sc.appendChild(gw);
+  gw.appendChild(cg); pzLeft.appendChild(gw);
+  sc.appendChild(pzLeft);
 
-  // Clues
-  var cg2 = el('div','clues-grid');
-  cg2.appendChild(makePanel('→ Waagrecht', across, 'across'));
-  cg2.appendChild(makePanel('↓ Senkrecht', down, 'down'));
-  sc.appendChild(cg2);
+  // ── Right: progress + clue panels ──
+  var pzRight = el('div','pz-right');
+
+  var pb = el('div','pz-progress');
+  pb.innerHTML = '<div class="progress-pct" id="pct">–</div><div style="flex:1"><div class="progress-track"><div class="progress-fill" id="pFill"></div></div><div class="progress-label" id="pLbl">0 / '+P.placed.length+' ausgefüllt</div></div>';
+  pzRight.appendChild(pb);
+
+  var cluesWrap = el('div','pz-clues');
+  cluesWrap.appendChild(makePanel('→ Waagrecht', across, 'across'));
+  cluesWrap.appendChild(makePanel('↓ Senkrecht', down, 'down'));
+  pzRight.appendChild(cluesWrap);
+
+  sc.appendChild(pzRight);
 }
 
 function makePanel(title, items, dir) {
@@ -780,16 +822,22 @@ function tap(r,c) {
         if(p.dir!==od)return false;
         return od==='across'?p.row===r&&p.col<=c&&c<p.col+p.word.length:p.col===c&&p.row<=r&&r<p.row+p.word.length;
       });
-      if (ow) { activeDir=od; activeNum=ow.number; highlight(); updateBar(); focusH(r,c); return; }
+      if (ow) { activeDir=od; activeNum=ow.number; activeR=r; activeC=c; highlight(); updateBar(); focusH(r,c); return; }
     }
   }
   var aw=puzzle.placed.find(function(p){return p.dir==='across'&&p.row===r&&p.col<=c&&c<p.col+p.word.length;});
   var dw=puzzle.placed.find(function(p){return p.dir==='down'&&p.col===c&&p.row<=r&&r<p.row+p.word.length;});
   if(aw){activeNum=aw.number;activeDir='across';}else if(dw){activeNum=dw.number;activeDir='down';}
+  activeR=r; activeC=c;
   highlight(); updateBar(); focusH(r,c);
 }
 
 function focusH(r,c) {
+  activeR=r; activeC=c;
+  // Update cursor cell highlight (cur class)
+  document.querySelectorAll('.cell.cur').forEach(function(x){x.classList.remove('cur');});
+  var curCell=getCell(r,c);
+  if(curCell&&curCell.classList.contains('hi'))curCell.classList.add('cur');
   var hi=document.getElementById('hiddenInp'); hi.value=''; hi.setAttribute('data-r',r); hi.setAttribute('data-c',c); hi.focus();
 }
 
@@ -801,6 +849,7 @@ function onHiddenInput(e) {
   var cell=getCell(r,c); if(!cell||!cell.classList.contains('wht'))return;
   cell.querySelector('input').value=val[val.length-1];
   cell.classList.remove('ok','ng');
+  activeR=r; activeC=c;
   advFrom(r,c); updateProgress();
 }
 
@@ -820,33 +869,52 @@ function onHiddenKey(e) {
 }
 
 function advFrom(r,c) {
-  var dr=activeDir==='down'?1:0, dc=activeDir==='across'?1:0;
-  var nx=getCell(r+dr,c+dc);
-  if(nx&&nx.classList.contains('wht')){tap(r+dr,c+dc);focusH(r+dr,c+dc);}
+  // Stay within the active word – never switch words/direction automatically
+  if(!puzzle||!activeNum)return;
+  var w=puzzle.placed.find(function(p){return p.number===activeNum&&p.dir===activeDir;});
+  if(!w)return;
+  var dr=w.dir==='down'?1:0, dc=w.dir==='across'?1:0;
+  var nr=r+dr, nc=c+dc;
+  // Only advance if next cell is still part of the same word
+  var endR=w.row+dr*(w.word.length-1), endC=w.col+dc*(w.word.length-1);
+  if(w.dir==='across'&&nr===r&&nc<=endC&&nc>=w.col){focusH(nr,nc);return;}
+  if(w.dir==='down'&&nc===c&&nr<=endR&&nr>=w.row){focusH(nr,nc);return;}
+  // At end of word – stay on last cell
 }
 function moveFrom(r,c,d,fd) {
   var dir=fd||activeDir;
   var dr=dir==='down'?d:0, dc=dir==='across'?d:0;
-  var nx=getCell(r+dr,c+dc);
-  if(nx&&nx.classList.contains('wht')){tap(r+dr,c+dc);focusH(r+dr,c+dc);}
+  var nr=r+dr, nc=c+dc;
+  var nx=getCell(nr,nc);
+  if(nx&&nx.classList.contains('wht')){focusH(nr,nc);}
 }
 function focusWord(num,dir) {
-  activeNum=num;activeDir=dir;highlight();updateBar();
+  activeNum=num;activeDir=dir;
   var w=puzzle.placed.find(function(p){return p.number===num&&p.dir===dir;});
+  if(w){activeR=w.row;activeC=w.col;}
+  highlight();updateBar();
   if(w)focusH(w.row,w.col);
 }
 
 function highlight() {
-  document.querySelectorAll('.cell.hi,.cell.sel').forEach(function(c){c.classList.remove('hi','sel');});
+  document.querySelectorAll('.cell.hi,.cell.sel,.cell.cur').forEach(function(c){c.classList.remove('hi','sel','cur');});
   document.querySelectorAll('.ci.act').forEach(function(c){c.classList.remove('act');});
   if(!activeNum||!puzzle)return;
   var w=puzzle.placed.find(function(p){return p.number===activeNum&&p.dir===activeDir;});
   if(!w)return;
   var dr=w.dir==='down'?1:0,dc=w.dir==='across'?1:0;
   for(var i=0;i<w.word.length;i++)getCell(w.row+dr*i,w.col+dc*i).classList.add('hi');
-  getCell(w.row,w.col).classList.add('sel');
+  // cursor cell = activeCell
+  var curCell=getCell(activeR,activeC);
+  if(curCell&&curCell.classList.contains('hi'))curCell.classList.add('cur');
+  else getCell(w.row,w.col).classList.add('cur'); // fallback to start
   var ci=document.getElementById('ci-'+w.dir+'-'+w.number);
-  if(ci){ci.classList.add('act');ci.scrollIntoView({block:'nearest',behavior:'smooth'});}
+  if(ci){
+    ci.classList.add('act');
+    // Only scroll within the clue panel itself, not the whole page
+    var panel=ci.parentElement;
+    if(panel){var top=ci.offsetTop-panel.offsetTop;panel.scrollTop=top-panel.clientHeight/2+ci.clientHeight/2;}
+  }
 }
 
 function updateBar() {
